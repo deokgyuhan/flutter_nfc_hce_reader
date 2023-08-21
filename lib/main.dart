@@ -1,125 +1,137 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:app_settings/app_settings.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(NfcReaderView());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class NfcReaderView extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => NfcReaderViewState();
+}
 
-  // This widget is the root of your application.
+class NfcReaderViewState extends State<NfcReaderView> {
+  ValueNotifier<dynamic> result = ValueNotifier(null);
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    _permissionCheck();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a blue toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+      home: Scaffold(
+        appBar: AppBar(title: Text('Nfc Hce Reader Example')),
+        body: SafeArea(
+          child: FutureBuilder<bool>(
+            future: NfcManager.instance.isAvailable(),
+            builder: (context, ss) =>
+            ss.data != true
+                ? Center(child: Text('NfcManager.isAvailable(): ${ss.data}'))
+                : Flex(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              direction: Axis.vertical,
+              children: [
+                Flexible(
+                  flex: 2,
+                  child: Container(
+                    margin: EdgeInsets.all(4),
+                    constraints: BoxConstraints.expand(),
+                    decoration: BoxDecoration(border: Border.all()),
+                    child: SingleChildScrollView(
+                      child: ValueListenableBuilder<dynamic>(
+                        valueListenable: result,
+                        builder: (context, value, _) =>
+                            Text('${value ?? ''}'),
+                      ),
+                    ),
+                  ),
+                ),
+                Flexible(
+                  flex: 3,
+                  child: GridView.count(
+                    padding: EdgeInsets.all(4),
+                    crossAxisCount: 2,
+                    childAspectRatio: 4,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                    children: [
+                      ElevatedButton(
+                          child: Text('Tag Read'), onPressed: () async {
+                        _tagRead();
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  void _tagRead() {
+    print('-------------->tag read start......');
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+    NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
+      print('-------------->tag discovered');
+      print('-------------->tag.data: ' + tag.data.toString());
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+      // result.value = tag.data['ndef']['cachedMessage']['records'][0]['payload'];
 
-  final String title;
+      var record = tag.data['ndef']['cachedMessage']['records'][0];
+      // print(record);
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+      var identifier = Uint8List.fromList(record['identifier']);
+      // print(identifier);
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+      var payload = Uint8List.fromList(record['payload']);
+      // print(payload);
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      var type = Uint8List.fromList(record['type']);
+      // print(type);
+
+      var typeNameFormat = Uint8List.fromList([record['typeNameFormat']]);
+      // print(typeNameFormat);
+
+      var error = [
+        2, 101, 110, 67, 105, 97, 111, 44, 32, 99, 111, 109, 101, 32, 118, 97, 63
+      ]; // \^BenCiao, come v<…>
+
+      if (payload.toString() != error.toString()) {
+        //payload list index from 1 to list's length
+        result.value = utf8.decode(Uint8List.fromList(payload.sublist(1)));
+      } else {
+        print('Please retry scanning');
+      }
+
+      // decoing
+      // String payloadStr = Utf8Codec().decode(payload);
+      // String typeStr = Utf8Codec().decode(type);
+      // String typeNameFormatStr = Utf8Codec().decode(typeNameFormat);
+
+      // decoding value print
+      // print('Payload: $payloadStr');
+      // print('Type: $typeStr');
+      // print('TypeNameFormat: $typeNameFormatStr');
+
+      NfcManager.instance.stopSession();
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
+  void _permissionCheck() async {
+    if (!(await NfcManager.instance.isAvailable())) {
+      if (Platform.isAndroid) {
+        AppSettings.openAppSettingsPanel(AppSettingsPanelType.nfc);
+      }
+    }
   }
 }
